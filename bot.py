@@ -21,9 +21,10 @@ intents.message_content = True
 client = commands.Bot(command_prefix="c!", intents=intents)
 
 class MessageButtons(discord.ui.View):
-    def __init__(self):
+    def __init__(self, convo):
         super().__init__()
         self.add_item(Button(style=ButtonStyle.primary, label="Redo", custom_id="0", row=0, emoji="↕"))
+        self.convo = convo
         for item in self.children:
             item.callback = self.dispatch
 
@@ -31,9 +32,12 @@ class MessageButtons(discord.ui.View):
         custom_id = int(interaction.data["custom_id"])
         message = interaction.message
 
-        interaction.response.defer()
+        await interaction.response.send_message("Editing now!", ephemeral=True, delete_after=30)
 
-        request = endpoint.run({"messages": []})
+        request = endpoint.run({"messages": convo})
+
+        response = await awaitResponse(request)
+        await message.channel.send(trimBeginning(convo[-1]["content"]), view=self)
     
 async def awaitResponse(request):
     while(True):
@@ -65,7 +69,7 @@ async def on_ready():
 @client.event
 async def on_message(message):
     # check if invalid
-    if(message.author == client.user):
+    if(message.author == client.user or message.author.bot):
         return
     if(isinstance(message.channel, discord.VoiceChannel)):
         return
@@ -73,6 +77,7 @@ async def on_message(message):
     # assemble conversation
     messages = reversed([message async for message in message.channel.history(limit=100)])
     convo = []
+    view = MessageButtons(convo)
     for message_ in messages:
         role = "user"
         content = message_.content
@@ -98,7 +103,7 @@ async def on_message(message):
     
     request = endpoint.run({"messages": convo})
     response = await awaitResponse(request)
-    await message.channel.send(trimBeginning(response, convo[-1]["content"]))
+    await message.channel.send(trimBeginning(response, convo[-1]["content"]), view)
 
     if(isinstance(message.channel, discord.DMChannel)):
         return
@@ -172,7 +177,7 @@ async def chat(interaction: discord.Interaction, system_prompt: str = None, star
         await thread.send(message["content"])
 
     # respond to user query
-    if(len(convo) < 2):
+    if(len(convo) < 3):
         return
 
     # rename thread
