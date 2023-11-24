@@ -1,0 +1,4 @@
+**/__pycache__/
+**/__pycache__/*
+.env
+system_prompt_thread.txt
