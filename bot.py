@@ -34,10 +34,10 @@ class MessageButtons(discord.ui.View):
 
         await interaction.response.send_message("Editing now!", ephemeral=True, delete_after=30)
 
-        request = endpoint.run({"messages": convo})
+        request = endpoint.run({"messages": self.convo})
 
         response = await awaitResponse(request)
-        await message.channel.send(trimBeginning(convo[-1]["content"]), view=self)
+        await message.edit(content=trimBeginning(response, self.convo[-1]["content"]), view=self)
     
 async def awaitResponse(request):
     while(True):
@@ -71,14 +71,20 @@ async def on_message(message):
     # check if invalid
     if(message.author == client.user or message.author.bot):
         return
-    if(isinstance(message.channel, discord.VoiceChannel)):
+    if(not isinstance(message.channel, discord.Thread) and not isinstance(message.channel, discord.DMChannel)):
+        return
+    if(not client.user.name in message.channel.name):
         return
     
     # assemble conversation
     messages = reversed([message async for message in message.channel.history(limit=100)])
     convo = []
     view = MessageButtons(convo)
+    searched_ids = []
     for message_ in messages:
+        if(message_.id in searched_ids):
+            continue
+        searched_ids.append(message_.id)
         role = "user"
         content = message_.content
         if(content.startswith("# System Message\n\n") and message_.author == client.user):
@@ -88,13 +94,14 @@ async def on_message(message):
             role = "assistant"
         user_ids = re.findall("<@\d+>", content)
         for user_id in user_ids:
+            uid = user_id.replace("<@", "").replace(">", "")
             user = await client.fetch_user(user_id)
             username = f"{user.name}#{user.discriminator}"
             if(user == client.user):
                 username = client.user.name
             elif(user.discriminator == "0"):
                 username = user.name
-            content = content.replace(f"<@userid>", user.name) #i know this doesn't work right; im lazy
+            content = content.replace(f"<@{userid}>", user.name)
         message_ = {
             "role": role,
             "content": content
@@ -103,12 +110,15 @@ async def on_message(message):
     
     request = endpoint.run({"messages": convo})
     response = await awaitResponse(request)
-    await message.channel.send(trimBeginning(response, convo[-1]["content"]), view)
+    await message.channel.send(trimBeginning(response, convo[-1]["content"]), view=view)
 
-    if(isinstance(message.channel, discord.DMChannel)):
+    if(not isinstance(message.channel, discord.Thread)):
         return
-    if(message.channel.name != f"{client.user.name}: Thread"):
+    if(message.channel.name != f"{client.user.name}: Thread" and not client.user.name in message.channel.name):
         return
+    thread = message.channel
+
+    return
 
     # rename thread
     thread_convo = [
@@ -175,25 +185,6 @@ async def chat(interaction: discord.Interaction, system_prompt: str = None, star
         if(message["role"] != "assistant"):
             continue
         await thread.send(message["content"])
-
-    # respond to user query
-    if(len(convo) < 3):
-        return
-
-    # rename thread
-    thread_convo = [
-        {
-            "role": "system",
-            "content": thread_namer
-        }
-    ]
-    for message in convo:
-        thread_convo.append(message)
-    
-    thread_request = endpoint.run({"messages": thread_convo})
-    response = await awaitResponse(thread_request)
-    response = trimBeginning(response, convo[-1]["content"])
-    await thread.edit(name=f"{client.user.name}: {response}"[:100])
 
 
 @client.tree.command(name="system")
