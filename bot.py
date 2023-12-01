@@ -37,6 +37,7 @@ class MessageButtons(discord.ui.View):
         request = endpoint.run({"messages": self.convo, "max_response_length": 2000})
 
         response = await awaitResponse(request)
+        response = response.replace("<|im_end|>", "")
         await message.edit(content=response, view=self)
     
 async def awaitResponse(request):
@@ -99,6 +100,7 @@ async def on_message(message):
     
     request = endpoint.run({"messages": convo, "max_response_length": 2000})
     response = await awaitResponse(request)
+    response = response.replace("<|im_end|>", "")
     await message.channel.send(response, view=view)
 
     if(not isinstance(message.channel, discord.Thread)):
@@ -121,6 +123,7 @@ async def on_message(message):
     
     thread_request = endpoint.run({"messages": thread_convo, "max_response_length": 2000})
     response = await awaitResponse(thread_request)
+    response = response.replace("<|im_end|>", "")
     await thread.edit(name=f"{client.user.name}: {response}"[:100])
 
 @client.tree.command(name="chat")
