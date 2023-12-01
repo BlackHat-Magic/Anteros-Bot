@@ -34,7 +34,7 @@ class MessageButtons(discord.ui.View):
 
         await interaction.response.send_message("Editing now!", ephemeral=True, delete_after=30)
 
-        request = endpoint.run({"messages": self.convo})
+        request = endpoint.run({"messages": self.convo, "max_response_length": 2000})
 
         response = await awaitResponse(request)
         await message.edit(content=response, view=self)
@@ -97,7 +97,7 @@ async def on_message(message):
         }
         convo.append(message_)
     
-    request = endpoint.run({"messages": convo})
+    request = endpoint.run({"messages": convo, "max_response_length": 2000})
     response = await awaitResponse(request)
     await message.channel.send(response, view=view)
 
@@ -119,7 +119,7 @@ async def on_message(message):
     for message in convo:
         thread_convo.append(message)
     
-    thread_request = endpoint.run({"messages": thread_convo})
+    thread_request = endpoint.run({"messages": thread_convo, "max_response_length": 2000})
     response = await awaitResponse(thread_request)
     await thread.edit(name=f"{client.user.name}: {response}"[:100])
 
