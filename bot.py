@@ -37,24 +37,13 @@ class MessageButtons(discord.ui.View):
         request = endpoint.run({"messages": self.convo})
 
         response = await awaitResponse(request)
-        await message.edit(content=trimBeginning(response, self.convo[-1]["content"]), view=self)
+        await message.edit(content=response, view=self)
     
 async def awaitResponse(request):
     while(True):
         if(request.status() == "COMPLETED"):
             return(request.output())
         await asyncio.sleep(1)
-
-def trimBeginning(string, substring):
-    index = string.find(substring)
-
-    if(index != -1):
-        result = string[index + len(substring):]
-    else:
-        result = string
-    result = result.replace("ASSISTANT:", "")
-    result = result.replace("</s>", "")
-    return(result.strip())
 
 @client.event
 async def on_ready():
@@ -110,7 +99,7 @@ async def on_message(message):
     
     request = endpoint.run({"messages": convo})
     response = await awaitResponse(request)
-    await message.channel.send(trimBeginning(response, convo[-1]["content"]), view=view)
+    await message.channel.send(response, view=view)
 
     if(not isinstance(message.channel, discord.Thread)):
         return
@@ -132,7 +121,6 @@ async def on_message(message):
     
     thread_request = endpoint.run({"messages": thread_convo})
     response = await awaitResponse(thread_request)
-    response = trimBeginning(response, convo[-1]["content"])
     await thread.edit(name=f"{client.user.name}: {response}"[:100])
 
 @client.tree.command(name="chat")
@@ -154,7 +142,7 @@ async def chat(interaction: discord.Interaction, system_prompt: str = None, star
 
     # assemble conversation
     if(system_prompt == None):
-        system_prompt = "A conversation between a helpful digital assistant and a curious user. The assistant answers the user's questions and fullfills their requests to the best of its ability."
+        system_prompt = "You are a helpful AI digital assistant chatting with a curious user. Answer their questions and fulfill their requests to the best of your abilities."
     
     convo = [{
         "role": "system",
