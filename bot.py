@@ -71,7 +71,7 @@ async def on_message(message):
     convo = []
     view = MessageButtons(convo)
     searched_ids = []
-    while len("".join(message_.content for message_ in messages)) > 1024:
+    while len("".join(message_.content for message_ in messages)) > 4096:
         if(messages[0].content.startswith("# System Message\n\n" and messages[0].author == client.user)):
            messages.pop[1]
            continue
