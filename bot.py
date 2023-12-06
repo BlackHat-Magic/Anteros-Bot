@@ -67,10 +67,15 @@ async def on_message(message):
         return
     
     # assemble conversation
-    messages = reversed([message async for message in message.channel.history(limit=100)])
+    messages = reversed([message_ async for message_ in message.channel.history(limit=100)])
     convo = []
     view = MessageButtons(convo)
     searched_ids = []
+    while len("".join(message_.content for message_ in messages)) > 1024:
+        if(messages[0].content.startswith("# System Message\n\n" and messages[0].author == client.user)):
+           messages.pop[1]
+           continue
+        messages.pop(0)
     for message_ in messages:
         if(message_.id in searched_ids):
             continue
