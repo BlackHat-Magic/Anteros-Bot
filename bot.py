@@ -67,7 +67,7 @@ async def on_message(message):
         return
     
     # assemble conversation
-    messages = list(reversed([message_ async for message_ in message.channel.history(limit=100)]))
+    messages = [message_ for message_ in reversed([message_ async for message_ in message.channel.history(limit=100)])]
     convo = []
     view = MessageButtons(convo)
     searched_ids = []
