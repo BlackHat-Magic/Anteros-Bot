@@ -73,7 +73,7 @@ async def on_message(message):
     searched_ids = []
     while len("".join(message_.content for message_ in messages)) > 4096:
         if(messages[0].content.startswith("# System Message\n\n") and messages[0].author == client.user):
-           messages.pop[1]
+           messages.pop(1)
            continue
         messages.pop(0)
     for message_ in messages:
