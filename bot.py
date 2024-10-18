@@ -99,8 +99,8 @@ async def on_message(message):
             elif(user.discriminator == "0"):
                 username = user.name
             content = content.replace(f"<@{userid}>", user.name)
-        if(convo[-1]["role"] == role):
-            convo[-1]["content"] += content
+        if(convo[len(convo) - 1]["role"] == role):
+            convo[len(convo) - 1]["content"] += content
         else:
             message_ = {
                 "role": role,
