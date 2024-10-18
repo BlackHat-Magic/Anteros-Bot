@@ -2,13 +2,17 @@ from dotenv import load_dotenv
 from discord.ext import commands
 from discord.ui import Button
 from discord import ButtonStyle
-import discord, os, re, requests, runpod, sys, time, asyncio
+from openai import OpenAI
+import discord, os, re, asyncio
 
 # set up stuff
 load_dotenv()
-runpod.api_key = os.getenv("RUNPOD_API_KEY")
-endpoint_id = os.getenv("RUNPOD_ENDPOINT")
-endpoint = runpod.Endpoint(endpoint_id)
+RUNPOD_API_KEY = os.getenv("RUNPOD_API_KEY")
+RUNPOD_ENDPOINT_ID = os.getenv("RUNPOD_ENDPOINT")
+endpoint = OpenAI(
+    base_url=f"https://api.runpod.ai/v2/{RUNPOD_ENDPOINT_ID}/openai/v1",
+    api_key=RUNPOD_API_KEY
+)
 CLIENT_TOKEN = os.getenv("DISCORD_CLIENT_TOKEN")
 CLIENT_ID = os.getenv("DISCORD_CLIENT_TOKEN")
 
@@ -24,9 +28,10 @@ class MessageButtons(discord.ui.View):
     def __init__(self, convo):
         super().__init__()
         self.add_item(Button(style=ButtonStyle.primary, label="Redo", custom_id="0", row=0, emoji="↕"))
+        self.add_item(Button(style=ButtonStyle.danger, label="Delete", custom_id="1", row=0, emoji="❌"))
         self.convo = convo
-        for item in self.children:
-            item.callback = self.dispatch
+        self.children[0].callback = self.dispatch
+        self.children[1].callback = self.delete
 
     async def dispatch(self, interaction: discord.Interaction):
         custom_id = int(interaction.data["custom_id"])
@@ -34,17 +39,17 @@ class MessageButtons(discord.ui.View):
 
         await interaction.response.send_message("Editing now!", ephemeral=True, delete_after=30)
 
-        request = endpoint.run({"messages": self.convo, "max_response_length": 256})
-
-        response = await awaitResponse(request)
-        response = response.replace("<|im_end|>", "")
+        response = endpoint.chat.completions.create(
+            model="TheDrummer/Gemmasutra-Mini-2B-v1",
+            messages=convo
+        )
+        print(response)
+        response = response.choices[0].message.content
         await message.edit(content=response, view=self)
     
-async def awaitResponse(request):
-    while(True):
-        if(request.status() == "COMPLETED"):
-            return(request.output())
-        await asyncio.sleep(1)
+    async def delete(self, interaction: discord.Interaction):
+        await interaction.message.delete()
+        await interaction.response.send_message("Message deleted.", ephemeral=True, delete_after=5)
 
 @client.event
 async def on_ready():
@@ -71,22 +76,19 @@ async def on_message(message):
     convo = []
     view = MessageButtons(convo)
     searched_ids = []
-    while len("".join(message_.content for message_ in messages)) > 4096:
-        if(messages[0].content.startswith("# System Message\n\n") and messages[0].author == client.user):
-           messages.pop(1)
-           continue
+    while len("".join(message_.content for message_ in messages)) > 16384:
         messages.pop(0)
     for message_ in messages:
         if(message_.id in searched_ids):
             continue
         searched_ids.append(message_.id)
-        role = "user"
         content = message_.content
-        if(content.startswith("# System Message\n\n") and message_.author == client.user):
-            role = "system"
-            content = content.replace("# System Message\n\n", "")
-        elif(message_.author == client.user):
+        if(len(content) < 1):
+            continue
+        if(message_.author == client.user):
             role = "assistant"
+        else:
+            role = "user"
         user_ids = re.findall("<@\d+>", content)
         for user_id in user_ids:
             uid = user_id.replace("<@", "").replace(">", "")
@@ -103,16 +105,45 @@ async def on_message(message):
         }
         convo.append(message_)
     
-    request = endpoint.run({"messages": convo, "max_response_length": 256})
-    response = await awaitResponse(request)
-    response = response.replace("<|im_end|>", "")
-    await message.channel.send(response, view=view)
+    response = endpoint.chat.completions.create(
+        model="TheDrummer/Gemmasutra-Mini-2B-v1",
+        messages=convo
+    )
+    response = response.choices[0].message.content
 
-    if(not isinstance(message.channel, discord.Thread)):
-        return
-    if(message.channel.name != f"{client.user.name}: Thread" and not client.user.name in message.channel.name):
-        return
-    thread = message.channel
+    split_response = response.split("\n")
+    message_to_send = ""
+    latest = None
+    for i, paragraph in enumerate(split_response):
+        if(len(paragraph) < 1):
+            continue
+        if(len(paragraph) > 2000):
+            if(len(message_to_send) > 0):
+                latest = await message.channel.send(message_to_send)
+            message_to_send = ""
+            sentences = paragraph.split(". ")
+            paragraph_to_send = ""
+            for j, sentence in enumerate(sentences):
+                if(len(paragraph_to_send) + len(sentence) < 2000):
+                    if(len(paragraph_to_send) > 0):
+                        paragraph_to_send += ". "
+                    paragraph_to_send += sentence
+                else:
+                    latest = await message.channel.send(paragraph_to_send, view=None)
+                    paragraph_to_send = ""
+            continue
+        elif(len(message_to_send) + len(paragraph) < 1998):
+            if(len(message_to_send) > 0):
+                message_to_send += "\n\n"
+            message_to_send += paragraph
+            continue
+        else:
+            latest = await message.channel.send(message_to_send, view=None)
+            message_to_send = ""
+            continue
+    
+    latest_content = latest.content
+    await latest.edit(content=latest_content, view=view)
 
     return
 
@@ -132,7 +163,7 @@ async def on_message(message):
     await thread.edit(name=f"{client.user.name}: {response}"[:100])
 
 @client.tree.command(name="chat")
-async def chat(interaction: discord.Interaction, system_prompt: str = None, start_message_bot: str = None):
+async def chat(interaction: discord.Interaction):
     # check if it's a DM channel
     if(isinstance(interaction.channel, discord.DMChannel)):
         await interaction.response.send_message("You don't need to use /chat in DMs. Just send a message!\n\nTo change the system prompt, use `/system`.", ephemeral=True)
@@ -147,20 +178,6 @@ async def chat(interaction: discord.Interaction, system_prompt: str = None, star
     if(isinstance(interaction.channel, discord.VoiceChannel)):
         await interaction.response.send_message("Conversations not supported in voice channels.", ephemeral=True)
         return
-
-    # assemble conversation
-    if(system_prompt == None):
-        system_prompt = "You are a helpful AI digital assistant chatting with a curious user. Answer their questions and fulfill their requests to the best of your abilities."
-    
-    convo = [{
-        "role": "system",
-        "content": system_prompt
-    }]
-    if(start_message_bot):
-        convo.append({
-            "role": "assistant",
-            "content": start_message_bot
-        })
     
     # get response
     await interaction.response.send_message("Creating thread...")
@@ -174,17 +191,5 @@ async def chat(interaction: discord.Interaction, system_prompt: str = None, star
         slowmode_delay=None,
         reason=None
     )
-
-    # set up initial context
-    await thread.send(f"# System Message\n\n{system_prompt}")
-    for message in convo:
-        if(message["role"] != "assistant"):
-            continue
-        await thread.send(message["content"])
-
-
-@client.tree.command(name="system")
-async def chat(interaction: discord.Interaction, new_system_prompt: str):
-    await interaction.response.send_message(f"# System Message\n\n{new_system_prompt}")
 
 client.run(CLIENT_TOKEN)
