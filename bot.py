@@ -109,7 +109,7 @@ async def on_message(message):
         model="TheDrummer/Gemmasutra-Mini-2B-v1",
         messages=convo
     )
-    response = response.choices[0].message.content
+    response = response.choices[0].message.content.replace("<end_of_turn>", "")
     split_response = [response[i:i+1900] for i in range(0, len(response), 1900)]
     for chunk in split_response:
         latest = await message.channel.send(chunk)
