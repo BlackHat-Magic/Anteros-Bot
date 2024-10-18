@@ -110,8 +110,14 @@ async def on_message(message):
         messages=convo
     )
     response = response.choices[0].message.content
+    split_response = [response[i:i+1900 for i in range(0, len(string), 1900)]]
+    for chunk in split_response:
+        latest = await message.channel.send(chunk)
+    await latest.edit(view=view)
+    return
 
     split_response = response.split("\n")
+    print(split_response)
     message_to_send = ""
     latest = None
     for i, paragraph in enumerate(split_response):
@@ -120,7 +126,6 @@ async def on_message(message):
         if(len(paragraph) > 2000):
             if(len(message_to_send) > 0):
                 message_to_send += ". "
-                latest = await message.channel.send(message_to_send)
             message_to_send = ""
             sentences = paragraph.split(". ")
             paragraph_to_send = ""
