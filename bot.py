@@ -119,6 +119,7 @@ async def on_message(message):
             continue
         if(len(paragraph) > 2000):
             if(len(message_to_send) > 0):
+                message_to_send += ". "
                 latest = await message.channel.send(message_to_send)
             message_to_send = ""
             sentences = paragraph.split(". ")
