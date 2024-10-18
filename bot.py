@@ -99,11 +99,14 @@ async def on_message(message):
             elif(user.discriminator == "0"):
                 username = user.name
             content = content.replace(f"<@{userid}>", user.name)
-        message_ = {
-            "role": role,
-            "content": content
-        }
-        convo.append(message_)
+        if(convo[-1]["role"] == role):
+            convo[-1]["content"] += content
+        else:
+            message_ = {
+                "role": role,
+                "content": content
+            }
+            convo.append(message_)
     
     response = endpoint.chat.completions.create(
         model="TheDrummer/Gemmasutra-Mini-2B-v1",
