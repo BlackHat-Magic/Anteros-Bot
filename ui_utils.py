@@ -6,7 +6,7 @@ import discord
 class MessageButtons(View):
     def __init__(self, prev_button, next_button):
         super().__init__()
-        self.add_item(Button(style=ButtonStyle.primary, label="Redo", custom_id="0", row=0, emoji="🔄"))
+        self.add_item(Button(style=ButtonStyle.primary, label="Redo", custom_id="0", row=0, emoji="🔃"))
         self.add_item(Button(style=ButtonStyle.danger, label="Delete", custom_id="1", row=1, emoji="❌"))
         if(prev_button):
             self.add_item(Button(style=ButtonStyle.primary, label="Previous Response", custom_id="2", row=0, emoji="⬅️"))

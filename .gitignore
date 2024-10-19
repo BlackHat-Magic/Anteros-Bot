@@ -2,3 +2,4 @@
 **/__pycache__/*
 .env
 system_prompt_thread.txt
+**/database.db
