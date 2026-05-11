@@ -1,20 +1,54 @@
 from discord.ui import Button, View
 from discord import ButtonStyle
 
+
 class MessageButtons(View):
     def __init__(self, prev_button, next_button):
         super().__init__()
-        self.add_item(Button(style=ButtonStyle.primary, label="Redo", custom_id="0", row=0, emoji="🔃"))
-        self.add_item(Button(style=ButtonStyle.danger, label="Delete", custom_id="1", row=1, emoji="❌"))
-        if(prev_button):
-            self.add_item(Button(style=ButtonStyle.primary, label="Previous Response", custom_id="2", row=0, emoji="⬅️"))
-        if(next_button):
-            self.add_item(Button(style=ButtonStyle.primary, label="Next Response", custom_id="3", row=0, emoji="➡️"))
+        self.add_item(
+            Button(
+                style=ButtonStyle.primary,
+                label="Redo",
+                custom_id="0",
+                row=0,
+                emoji="🔃",
+            )
+        )
+        self.add_item(
+            Button(
+                style=ButtonStyle.danger,
+                label="Delete",
+                custom_id="1",
+                row=1,
+                emoji="❌",
+            )
+        )
+        if prev_button:
+            self.add_item(
+                Button(
+                    style=ButtonStyle.primary,
+                    label="Previous Response",
+                    custom_id="2",
+                    row=0,
+                    emoji="⬅️",
+                )
+            )
+        if next_button:
+            self.add_item(
+                Button(
+                    style=ButtonStyle.primary,
+                    label="Next Response",
+                    custom_id="3",
+                    row=0,
+                    emoji="➡️",
+                )
+            )
         # self.add_item(Button(style=ButtonStyle.primary, label="Edit", custom_id="4", row=2, emoji="✒️"))
-    
+
+
 # class EditorModal(Modal, text="", session=None, db_message_id=0, client=None, title="Edit Message"):
 #     self.text = TextInput(
-#         label="Message Text", 
+#         label="Message Text",
 #         default=text,
 #         placeholder="Message Text",
 #         required=True,
@@ -41,7 +75,7 @@ class MessageButtons(View):
 #         while(messages[0].author == self.client.user):
 #             await messages[0].delete()
 #             messages.pop(0)
-        
+
 #         # write the new message
 #         split_content = [self.text[i:i+1900] for i in range(0, len(self.text), 1900)]
 #         for chunk in split_content:
@@ -51,4 +85,3 @@ class MessageButtons(View):
 #         selected_variant.text = self.text
 #         db_message.discord_id = latest.id
 #         self.session.commit()
-        

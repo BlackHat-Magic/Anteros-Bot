@@ -1,4 +1,12 @@
-from sqlalchemy import create_engine, Column, Integer, ForeignKey, Float, Boolean, String
+from sqlalchemy import (
+    create_engine,
+    Column,
+    Integer,
+    ForeignKey,
+    Float,
+    Boolean,
+    String,
+)
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import relationship, sessionmaker
 from dotenv import load_dotenv
@@ -8,6 +16,7 @@ load_dotenv()
 DATABASE_NAME = os.getenv("SQLITE_DATABASE_NAME")
 
 Base = declarative_base()
+
 
 class User(Base):
     __tablename__ = "users"
@@ -25,12 +34,14 @@ class Request(Base):
     user = relationship("User", back_populates="requests")
     date = Column(Float)
 
+
 class Channel(Base):
     __tablename__ = "channels"
     id = Column(Integer, primary_key=True)
     userid = Column(Integer, ForeignKey("users.id"))
     user = relationship("User", back_populates="created_channels")
     messages = relationship("Message", back_populates="channel")
+
 
 class Message(Base):
     __tablename__ = "messages"
@@ -43,6 +54,7 @@ class Message(Base):
     selected_variant = Column(Integer)
     variants = relationship("Variant", back_populates="message")
 
+
 class Variant(Base):
     __tablename__ = "variants"
     id = Column(Integer, primary_key=True)
@@ -50,9 +62,10 @@ class Variant(Base):
     message = relationship("Message", back_populates="variants")
     text = Column(String)
 
+
 def create_database():
     database = create_engine(f"sqlite:///{DATABASE_NAME}")
     Base.metadata.create_all(database)
     Session = sessionmaker(bind=database)
     session = Session()
-    return(session)
+    return session
