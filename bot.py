@@ -2,9 +2,11 @@ from dotenv import load_dotenv
 from discord.ext import commands
 from openai import OpenAI
 from chat_cog import ChatCog
-import discord, os, re, asyncio, sys
+import discord
+import os
+import sys
 
-from models import User, Request, create_database
+from models import User, create_database
 
 # set up stuff
 load_dotenv()

@@ -1,9 +1,11 @@
 from discord import app_commands
 from discord.ext import commands
-from ui_utils import MessageButtons#, EditorModal
-from dotenv import load_dotenv
+from ui_utils import MessageButtons, EditorModal
 from models import User, Channel, Message, Variant, Request
-import discord, openai, asyncio, os, re, time
+import discord
+import asyncio
+import re
+import time
 
 async def assemble_conversation(channel, client):
     messages = [message for message in reversed([message async for message in channel.history(limit=100)])]
@@ -36,14 +38,17 @@ async def assemble_conversation(channel, client):
             role = "user"
         user_ids = re.findall("<@\d+>", content)
         for user_id in user_ids:
-            uid = user_id.replace("<@", "").replace(">", "")
+            user_id = user_id.replace("<@", "").replace(">", "").strip()
+            try:
+                user_id = int(user_id)
+            except (TypeError, ValueError) as _:
+                continue
             user = await client.fetch_user(user_id)
-            username = f"{user.name}#{user.discriminator}"
             if(user == client.user):
-                username = client.user.name
+                pass
             elif(user.discriminator == "0"):
-                username = user.name
-            content = content.replace(f"<@{userid}>", user.name)
+                pass
+            content = content.replace(f"<@{user_id}>", user.name)
         
         # fix some stuff about the message.
         if(len(convo) > 0 and convo[-1]["role"] == role):
@@ -135,7 +140,8 @@ class ChatCog(commands.Cog):
                 text=response
             )
             new_request = Request(
-                user=db_user
+                user=db_user,
+                date=now
             )
             self.session.add(new_variant)
             self.session.add(new_request)
@@ -216,7 +222,7 @@ class ChatCog(commands.Cog):
             return
         if(not isinstance(message.channel, discord.Thread) and not isinstance(message.channel, discord.DMChannel)):
             return
-        if(not f"{self.client.user.name}: " in message.channel.name):
+        if(f"{self.client.user.name}: " not in message.channel.name):
             return
         
         # check if user exits
@@ -252,10 +258,10 @@ class ChatCog(commands.Cog):
                 user_requests.pop(0)
         self.session.commit()
         if(len(user_requests) >= 100):
-            earliest_request = user_requests[0]
-            message.channel.send(f"Too many requests (limit 100 per hour).\n\nTry again at {int(now) + 3600}.\n\n-# This message will delete itself next time you make a valid request.", delete_after=60)
+            next_free = user_requests[0].date
+            message.channel.send(f"Too many requests (limit 100 per hour).\n\nTry again at {int(next_free) + 3600}.\n\n-# This message will delete itself next time you make a valid request.", delete_after=60)
             return
-        
+
         # get conversation
         convo = await assemble_conversation(message.channel, self.client)
         view = MessageButtons(False, False)
@@ -329,21 +335,6 @@ class ChatCog(commands.Cog):
         await latest.edit(content=latest_content, view=view)
 
         return
-
-        # rename thread
-        thread_convo = [
-            {
-                "role": "system",
-                "content": thread_namer
-            }
-        ]
-        for message in convo:
-            thread_convo.append(message)
-        
-        thread_request = self.endpoint.run({"messages": thread_convo, "max_response_length": 256})
-        response = await awaitResponse(thread_request)
-        response = response.replace("<|im_end|>", "")
-        await thread.edit(name=f"{self.client.user.name}: {response}"[:100])
 
     @app_commands.command(name="chat")
     async def chat(self, interaction: discord.Interaction):

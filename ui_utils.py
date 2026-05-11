@@ -1,7 +1,5 @@
-from discord.ui import Button, View, TextInput, Modal
-from discord import ButtonStyle, Interaction, utils
-from models import Message, Variant
-import discord
+from discord.ui import Button, View
+from discord import ButtonStyle
 
 class MessageButtons(View):
     def __init__(self, prev_button, next_button):
