@@ -1,0 +1,17 @@
+[project]
+name = "anteros-bot"
+version = "0.1.0"
+description = "I'm running out of Greek myths that start with \"A.\""
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "discord>=2.3.2",
+    "openai>=2.36.0",
+    "python-dotenv>=1.2.2",
+    "sqlalchemy>=2.0.49",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.12",
+]
