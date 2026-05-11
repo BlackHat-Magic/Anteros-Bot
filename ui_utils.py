@@ -3,7 +3,7 @@ from discord import ButtonStyle
 
 
 class MessageButtons(View):
-    def __init__(self, prev_button, next_button):
+    def __init__(self, prev_button: bool, next_button: bool) -> None:
         super().__init__()
         self.add_item(
             Button(

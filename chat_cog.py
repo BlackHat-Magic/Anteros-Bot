@@ -1,14 +1,20 @@
 from discord import app_commands
 from discord.ext import commands
-from ui_utils import MessageButtons, EditorModal
+from discord.abc import Messageable
+from openai import OpenAI
+from sqlalchemy.orm import Session
+from ui_utils import MessageButtons  # , EditorModal
 from models import User, Channel, Message, Variant, Request
 import discord
 import asyncio
 import re
 import time
+from typing import Any, cast
 
 
-async def assemble_conversation(channel, client):
+async def assemble_conversation(
+    channel: Messageable, client: commands.Bot
+) -> list[dict[str, str]]:
     messages = [
         message
         for message in reversed(
@@ -63,20 +69,24 @@ async def assemble_conversation(channel, client):
 
 
 class ChatCog(commands.Cog):
-    def __init__(self, client, endpoint, session):
-        self.client = client
-        self.endpoint = endpoint
-        self.user_limits = {}
-        self.session = session
+    def __init__(
+        self, client: commands.Bot, endpoint: OpenAI, session: Session
+    ) -> None:
+        self.client: commands.Bot = client
+        self.endpoint: OpenAI = endpoint
+        self.user_limits: dict = {}
+        self.session: Session = session
 
     @commands.Cog.listener()
-    async def on_interaction(self, interaction):
-        # Get the custom ID
+    async def on_interaction(self, interaction: discord.Interaction) -> None:
+        if interaction.data is None:
+            return
         custom_id = interaction.data.get("custom_id", None)
         if not custom_id:
             return
 
-        # get the message
+        if interaction.message is None:
+            return
         message = interaction.message
         db_message = (
             self.session.query(Message).filter_by(discord_id=message.id).first()
@@ -87,13 +97,17 @@ class ChatCog(commands.Cog):
             )
             return
 
-        # get channe;
+        if interaction.channel is None:
+            return
         channel = interaction.channel
+        if not isinstance(channel, Messageable):
+            return
         db_channel = self.session.get(Channel, channel.id)
         if not db_channel:
             await interaction.response.send_message(
                 "Error; Couldn't find thread.", ephemeral=True
             )
+            return
 
         # if this isn't the user that requested the message, they can't change it
         db_user = self.session.get(User, interaction.user.id)
@@ -102,7 +116,7 @@ class ChatCog(commands.Cog):
                 "Only the channel creator can change the thread.", ephemeral=True
             )
             return
-        if db_user.id != db_channel.user.id:
+        if db_channel.user is None or db_user.id != db_channel.user.id:
             print(db_user.id)
             print(db_channel.user.id)
             await interaction.response.send_message(
@@ -139,23 +153,27 @@ class ChatCog(commands.Cog):
             # generate a new message
             convo = await assemble_conversation(channel, self.client)
             response = self.endpoint.chat.completions.create(
-                model="TheDrummer/Gemmasutra-Mini-2B-v1", messages=convo
+                model="TheDrummer/Gemmasutra-Mini-2B-v1", messages=cast(Any, convo)
             )
             response = response.choices[0].message.content
+            if response is None:
+                response = ""
             split_response = [
                 response[i : i + 1900] for i in range(0, len(response), 1900)
             ]
             for chunk in split_response:
                 latest = await channel.send(chunk.replace("<end_of_turn>", ""))
             await latest.edit(view=view)
-            await interim.delete()
+            if interim is not None:
+                await interim.delete()
 
             # log new variant in database
             now = time.time()
-            db_message.discord_id = latest.id
-            db_message.selected_variant = (
+            db_message.discord_id = latest.id  # ty: ignore[invalid-assignment]
+            variant_count = (
                 self.session.query(Variant).filter_by(messageid=db_message.id).count()
             )
+            db_message.selected_variant = variant_count  # ty: ignore[invalid-assignment]
             new_variant = Variant(message=db_message, text=response)
             new_request = Request(user=db_user, date=now)
             self.session.add(new_variant)
@@ -191,21 +209,24 @@ class ChatCog(commands.Cog):
                 await messages[-1].delete()
                 messages.pop()
 
-            target_variant = db_message.selected_variant - 1
-            content = (
-                self.session.query(Variant)
-                .filter_by(messageid=db_message.id)
-                .all()[target_variant]
-                .text
+            variant_index: int = cast(int, db_message.selected_variant) - 1
+            content = cast(
+                str,
+                (
+                    self.session.query(Variant)
+                    .filter_by(messageid=db_message.id)
+                    .all()[variant_index]
+                    .text
+                ),
             )
             split_content = [
                 content[i : i + 1900] for i in range(0, len(content), 1900)
             ]
             for chunk in split_content:
                 latest = await message.channel.send(chunk.replace("<end_of_turn>", ""))
-            view = MessageButtons(target_variant > 0, True)
+            view = MessageButtons(variant_index > 0, True)
             await latest.edit(view=view)
-            db_message.discord_id = latest.id
+            db_message.discord_id = latest.id  # ty: ignore[invalid-assignment]
             db_message.selected_variant -= 1
             self.session.commit()
 
@@ -230,35 +251,35 @@ class ChatCog(commands.Cog):
                 await messages[-1].delete()
                 messages.pop()
 
-            target_variant = db_message.selected_variant + 1
-            content = possible_variants[target_variant].text
+            variant_index: int = cast(int, db_message.selected_variant) + 1
+            content = cast(str, possible_variants[variant_index].text)
             split_content = [
                 content[i : i + 1900] for i in range(0, len(content), 1900)
             ]
             for chunk in split_content:
                 latest = await message.channel.send(chunk.replace("<end_of_turn>", ""))
-            view = MessageButtons(True, target_variant < len(possible_variants) - 1)
+            view = MessageButtons(True, variant_index < len(possible_variants) - 1)
             await latest.edit(view=view)
-            db_message.discord_id = latest.id
+            db_message.discord_id = latest.id  # ty: ignore[invalid-assignment]
             db_message.selected_variant += 1
             self.session.commit()
 
-        if custom_id == "4":
-            all_variants = (
-                self.session.query(Variant).filter_by(messageid=db_message.id).all()
-            )
-            variant = all_variants[db_message.selected_variant]
-            await interaction.response.send_modal(
-                EditorModal(
-                    text=variant.text,
-                    session=self.session,
-                    db_message_id=db_message.discord_id,
-                    client=self.client,
-                )
-            )
+        # if custom_id == "4":
+        #     all_variants = (
+        #         self.session.query(Variant).filter_by(messageid=db_message.id).all()
+        #     )
+        #     variant = all_variants[db_message.selected_variant]
+        #     await interaction.response.send_modal(
+        #         EditorModal(
+        #             text=variant.text,
+        #             session=self.session,
+        #             db_message_id=db_message.discord_id,
+        #             client=self.client,
+        #         )
+        #     )
 
     @commands.Cog.listener()
-    async def on_message(self, message):
+    async def on_message(self, message: discord.Message) -> None:
         # check if invalid
         if message.author == self.client.user or message.author.bot:
             return
@@ -266,7 +287,14 @@ class ChatCog(commands.Cog):
             message.channel, discord.DMChannel
         ):
             return
-        if f"{self.client.user.name}: " not in message.channel.name:
+        if self.client.user is None:
+            return
+        channel_name: str
+        if isinstance(message.channel, discord.DMChannel):
+            channel_name = str(message.channel.id)
+        else:
+            channel_name = message.channel.name
+        if f"{self.client.user.name}: " not in channel_name:
             return
 
         # check if user exits
@@ -302,8 +330,8 @@ class ChatCog(commands.Cog):
                 user_requests.pop(0)
         self.session.commit()
         if len(user_requests) >= 100:
-            next_free = user_requests[0].date
-            message.channel.send(
+            next_free = cast(float, user_requests[0].date)
+            await message.channel.send(
                 f"Too many requests (limit 100 per hour).\n\nTry again at {int(next_free) + 3600}.\n\n-# This message will delete itself next time you make a valid request.",
                 delete_after=60,
             )
@@ -315,9 +343,11 @@ class ChatCog(commands.Cog):
 
         # get and send the response
         response = self.endpoint.chat.completions.create(
-            model="TheDrummer/Gemmasutra-Mini-2B-v1", messages=convo
+            model="TheDrummer/Gemmasutra-Mini-2B-v1", messages=cast(Any, convo)
         )
         response = response.choices[0].message.content
+        if response is None:
+            response = ""
         split_response = [response[i : i + 1900] for i in range(0, len(response), 1900)]
         for chunk in split_response:
             latest = await message.channel.send(chunk.replace("<end_of_turn>", ""))
@@ -379,7 +409,7 @@ class ChatCog(commands.Cog):
         return
 
     @app_commands.command(name="chat")
-    async def chat(self, interaction: discord.Interaction):
+    async def chat(self, interaction: discord.Interaction) -> None:
         # check if it's a DM channel
         if isinstance(interaction.channel, discord.DMChannel):
             await interaction.response.send_message(
@@ -403,27 +433,49 @@ class ChatCog(commands.Cog):
             )
             return
 
+        if isinstance(interaction.channel, discord.ForumChannel):
+            await interaction.response.send_message(
+                "Conversations not supported in forum channels.", ephemeral=True
+            )
+            return
+
+        if (
+            isinstance(interaction.channel, discord.CategoryChannel)
+            or interaction.channel is None
+        ):
+            await interaction.response.send_message(
+                "I'm pretty sure this isn't supposed to be possible.", ephemeral=True
+            )
+            return
+
         # get user
-        db_user = self.session.get(User, interaction.user.id)
-        if not db_user:
-            db_user = User(id=interaction.user.id)
+        db_user: User | None = self.session.get(User, interaction.user.id)
+        if db_user is None:
+            db_user: User = User(id=interaction.user.id)
             self.session.add(db_user)
 
         # get response
-        await interaction.response.send_message("Creating thread...")
-        await asyncio.sleep(0.100)
-        confirmation_message = await interaction.channel.fetch_message(
-            interaction.channel.last_message_id
+        last_message_id: int = await interaction.response.send_message(
+            "Creating thread..."
+        ).message_id
+        confirmation_message: discord.Message = await interaction.channel.fetch_message(
+            last_message_id
         )
 
+        if self.client.user is None:
+            await interaction.response.send_message(
+                "Bot is not ready. Please try again later.", ephemeral=True
+            )
+            return
+
         # create thread
-        thread = await confirmation_message.create_thread(
+        thread: discord.Thread = await confirmation_message.create_thread(
             name=f"{self.client.user.name}: Thread",
             auto_archive_duration=60,
             slowmode_delay=None,
             reason=None,
         )
 
-        new_channel = Channel(id=thread.id, user=db_user)
+        new_channel: Channel = Channel(id=thread.id, user=db_user)
         self.session.add(new_channel)
         self.session.commit()
